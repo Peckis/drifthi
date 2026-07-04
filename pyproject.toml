@@ -1,0 +1,30 @@
+[project]
+name = "drifthi"
+version = "0.1.0"
+description = "Drift-scan HI (21 cm) radio telescope pipeline: acquisition, calibration, extraction, HI4PI comparison"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "astropy>=5.3",
+    "matplotlib>=3.7",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+hi-observe = "drifthi.observe:main"
+hi-check = "drifthi.check:main"
+hi-process = "drifthi.process:main"
+hi-stack = "drifthi.stack:main"
+hi-spectrum = "drifthi.spectrum:main"
+hi-pictor-bot = "drifthi.pictor_bot:main"
+hi-simulate = "drifthi.simulate:main"
+hi-fetch-hi4pi = "drifthi.hi4pi:main"
+hi-compare = "drifthi.compare:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/drifthi"]

@@ -1,0 +1,16 @@
+# /etc/systemd/system/hi-observe.service
+# Adjust User= and paths to your Pi. Data accumulates in data/raw/<session>/.
+[Unit]
+Description=drifthi continuous HI drift-scan observer
+After=rtl_tcp.service
+Requires=rtl_tcp.service
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/pipeline1
+ExecStart=/home/pi/pipeline1/.venv/bin/hi-observe --config config.yaml
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

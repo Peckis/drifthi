@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+data/
+hi4pi_cache/
+tools/
+checks/
+*.npz
+*.fits
+*.png
+!docs/*.png
+uv.lock

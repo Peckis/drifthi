@@ -1,0 +1,62 @@
+# drifthi configuration -- edit site and pointing to match your setup.
+
+paths:
+  # Where hi-observe / hi-simulate write raw sessions. Point this at your
+  # SSD mount on the Pi, e.g. /mnt/ssd/hi-data. CLI --out overrides it.
+  raw_dir: "data/raw"
+
+site:
+  name: "Backyard, Lithuania"
+  lat_deg: 54.9          # EDIT: your latitude
+  lon_deg: 23.9          # EDIT: your longitude (east positive)
+  height_m: 80.0
+
+pointing:
+  # Fixed drift-scan pointing of the dish (your best estimate).
+  # hi-compare will fit the true value against HI4PI afterwards.
+  az_deg: 180.0
+  el_deg: 55.0
+  beam_fwhm_deg: 17.0    # ~1.22 * 21cm / 0.8 m ~ 18 deg; offset dishes a bit less
+
+sdr:
+  host: "127.0.0.1"
+  port: 1234
+  sample_rate_hz: 2.4e6
+  # ON: line sits ~+0.31 MHz from center, away from the DC spike.
+  freq_on_hz: 1420.1e6
+  # OFF: line-free reference 3.1 MHz up, used to divide out the bandpass.
+  freq_off_hz: 1423.2e6
+  gain_db: 29.7          # SAWbird already gives ~40 dB LNA gain; avoid ADC saturation
+  ppm: 0
+  bias_tee: false        # SAWbird is powered externally -- keep the coax DC-free
+  nfft: 4096             # 586 Hz = 0.124 km/s per raw channel
+  t_on_s: 15.0
+  t_off_s: 15.0
+  settle_s: 0.25         # seconds of samples discarded after each retune
+  chunk_cycles: 20       # ON/OFF cycles per output .npz file
+
+processing:
+  tsys_assumed_k: 60.0   # rough guess; hi-compare refines it against HI4PI
+  edge_frac: 0.08        # fraction of band discarded at each edge (filter rolloff)
+  dc_halfwidth_bins: 3   # channels around DC to blank
+  v_min_kms: -250.0      # output LSR velocity grid
+  v_max_kms: 250.0
+  dv_kms: 1.0
+  baseline_order: 3
+  rfi_chan_sigma: 6.0
+  rfi_pixel_sigma: 6.0
+  rfi_cycle_sigma: 5.0
+  ra_bin_deg: 1.0
+  time_bin_s: 240.0      # time binning used for the HI4PI comparison
+
+hi4pi:
+  cache_dir: "hi4pi_cache"
+  base_url: "http://cdsarc.u-strasbg.fr/ftp/J/A+A/594/A116/CUBES/EQ2000/CAR/"
+  v_max_kms: 350.0       # velocity crop of the strip cache
+  sky_bin_deg: 0.5       # strip cache resolution (plenty for a 17 deg beam)
+  v_bin_ch: 2            # average pairs of 1.29 km/s channels -> 2.58 km/s
+
+compare:
+  search_deg: 15.0       # +/- pointing search range
+  coarse_step_deg: 3.0
+  fine_step_deg: 0.75
