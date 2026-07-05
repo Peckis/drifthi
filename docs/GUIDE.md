@@ -367,11 +367,13 @@ an all-sky HI map.
    remaining pointing component and T_sys; put both into the config and
    reprocess. Done -- from then on it's just data accumulation.
 
-### The daily two-liner
+### The daily two-liner (plus one for fun)
 
 ```bash
 uv run hi-process --all     # processes only sessions with new data
 uv run hi-stack --auto      # groups sessions by declination, restacks each
+uv run hi-skymap            # all-sky Aitoff map: every track's beam smear,
+                            # the Milky Way band, and % of sky / MW covered
 ```
 
 `--all` skips up-to-date sessions (`--force` overrides); `--auto` groups
