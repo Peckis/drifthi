@@ -122,8 +122,10 @@ def main(argv=None) -> int:
                     help="which plane crossing to observe (cygnus = l~75, brightest)")
     ap.add_argument("--window-h", type=float, default=1.0,
                     help="observing window centered on the crossing [hours]")
-    ap.add_argument("--gap-s", type=float, default=90.0,
-                    help="pause between consecutive requests (queue processing time)")
+    ap.add_argument("--gap-s", type=float, default=240.0,
+                    help="pause between consecutive requests; PICTOR needs "
+                         "~600 s observing + processing per slot, and requests "
+                         "landing during processing can be silently dropped")
     ap.add_argument("--nights", type=int, default=1, help="repeat for N nights")
     ap.add_argument("--name", default="mw_transit", help="observation name prefix")
     ap.add_argument("--dry-run", action="store_true",
