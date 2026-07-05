@@ -28,26 +28,77 @@ import matplotlib.pyplot as plt
 
 from . import extract, velocity
 from .config import load_config
+from .coverage import coverage_plot, find_strip_cache
 from .process import _extraction_plots
+
+
+def _session_dec(sdir: pathlib.Path):
+    p = sdir / "products" / "ra_map.npz"
+    if not p.exists():
+        return None
+    z = np.load(p)
+    dec, counts = z["dec"], z["counts"]
+    if (counts > 0).sum() == 0:
+        return None
+    return float(np.nanmean(dec[counts > 0]))
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Stack processed sessions into a deeper RA map")
-    ap.add_argument("sessions", nargs="+", help="session dirs (each must be hi-processed)")
+    ap.add_argument("sessions", nargs="*", help="session dirs (each must be hi-processed)")
+    ap.add_argument("--auto", action="store_true",
+                    help="discover all processed sessions under paths.raw_dir, "
+                         "group them by declination (same dish setting), and "
+                         "stack each group into data/stacks/dec<+XX>/")
+    ap.add_argument("--dec-tol", type=float, default=2.0,
+                    help="max dec difference [deg] for two sessions to count "
+                         "as the same pointing in --auto mode")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--out", default=None,
                     help="output directory (default data/stacks/<timestamp>)")
     args = ap.parse_args(argv)
-    load_config(args.config)  # fail early if run from the wrong directory
+    cfg = load_config(args.config)
 
+    if args.auto:
+        raw = pathlib.Path(cfg.get("paths", {}).get("raw_dir", "data/raw"))
+        cands = [(d, _session_dec(d)) for d in sorted(raw.iterdir())
+                 if d.is_dir() and "sunscan" not in d.name.lower()] \
+            if raw.exists() else []
+        cands = [(d, dec) for d, dec in cands if dec is not None]
+        if not cands:
+            raise SystemExit("[stack] --auto found no processed sessions "
+                             "(run hi-process --all first)")
+        groups: list[list] = []
+        for d, dec in cands:
+            for g in groups:
+                if abs(g[0][1] - dec) <= args.dec_tol:
+                    g.append((d, dec))
+                    break
+            else:
+                groups.append([(d, dec)])
+        rc = 0
+        for g in groups:
+            dec0 = float(np.mean([dec for _, dec in g]))
+            out = pathlib.Path("data/stacks") / f"dec{dec0:+05.1f}"
+            print(f"[stack] group dec {dec0:+.1f}: "
+                  f"{', '.join(d.name for d, _ in g)} -> {out}")
+            rc |= _stack([str(d) for d, _ in g], cfg, out)
+        return rc
+
+    if not args.sessions:
+        ap.error("no sessions given (pass directories or use --auto)")
     out = pathlib.Path(args.out) if args.out else \
         pathlib.Path("data/stacks") / time.strftime("%Y%m%d_%H%M%S", time.gmtime())
+    return _stack(args.sessions, cfg, out)
+
+
+def _stack(sessions: list[str], cfg: dict, out: pathlib.Path) -> int:
     out.mkdir(parents=True, exist_ok=True)
 
     ra = v = None
     num = den = None
     dec_num = dec_den = None
-    for sdir in args.sessions:
+    for sdir in sessions:
         p = pathlib.Path(sdir) / "products" / "ra_map.npz"
         if not p.exists():
             raise SystemExit(f"[stack] {p} missing -- run hi-process on {sdir} first")
@@ -95,13 +146,17 @@ def main(argv=None) -> int:
                        shading="nearest")
     ax.set_xlabel("RA [deg]")
     ax.set_ylabel("$v_{LSR}$ [km/s]")
-    ax.set_title(f"stacked RA x velocity map ({len(args.sessions)} sessions, "
+    ax.set_title(f"stacked RA x velocity map ({len(sessions)} sessions, "
                  f"{int(counts_total.sum())} cycles)")
     fig.colorbar(im, ax=ax, label="$T_B$ [K]")
     fig.tight_layout()
     fig.savefig(out / "waterfall_ra.png", dpi=130)
     plt.close(fig)
 
+    coverage_plot(out / "coverage.png", ra, dec_b, filled,
+                  float(cfg["pointing"]["beam_fwhm_deg"]),
+                  strip_path=find_strip_cache(cfg),
+                  title=f"stacked coverage ({len(sessions)} sessions)")
     rows = extract.analyze_bins(v, W[filled], ra[filled], dec_b[filled],
                                 l_b[filled], b_b[filled], out / "extraction.csv")
     _extraction_plots(out, v, W[filled], ra[filled], l_b[filled], b_b[filled], rows)

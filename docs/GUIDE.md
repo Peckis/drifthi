@@ -344,6 +344,43 @@ uv run hi-compare data/raw/<session>
 elevation by ~half a beam (8–10°) and repeat — each setting adds a ring to
 an all-sky HI map.
 
+### First-light checklist
+
+1. `config.yaml`: set `site` lat/lon and your best-guess `pointing` az/el.
+2. Bench check with everything connected as it will observe:
+   `rtl_tcp -a 127.0.0.1 -p 1234 -b 4` + `hi-check` (LNA powered
+   externally, `bias_tee: false`). Want: no clipping, quotient noise near
+   the radiometer limit, ADC std well above the bare-dongle value.
+3. **Daytime, dish in its final position:** run
+   `hi-observe --tag sunscan` from ~3 h before to ~3 h after solar noon,
+   then `hi-sunscan data/raw/<session>_sunscan`. It fits the Sun's drift
+   through the beam and reports the transit time, your **measured beam
+   FWHM**, and the along-path pointing correction (a single transit cannot
+   constrain the cross-path component -- that only lowers the bump height;
+   `hi-compare` fixes it later, or tilt the dish ~5 deg and repeat).
+   Sessions tagged `sunscan` are automatically excluded from `--all`/
+   `--auto` science processing. Note: this needs the Sun's declination
+   (+23 in July) within ~a beam of the dish declination.
+4. Update `pointing` (and `beam_fwhm_deg`) from the sunscan, then observe
+   all night, and every morning run the two-liner in the next section.
+5. After the first full night: `hi-fetch-hi4pi` + `hi-compare` to nail the
+   remaining pointing component and T_sys; put both into the config and
+   reprocess. Done -- from then on it's just data accumulation.
+
+### The daily two-liner
+
+```bash
+uv run hi-process --all     # processes only sessions with new data
+uv run hi-stack --auto      # groups sessions by declination, restacks each
+```
+
+`--all` skips up-to-date sessions (`--force` overrides); `--auto` groups
+sessions whose declinations agree to `--dec-tol` (default 2 deg) and writes
+one deepening stack per dish setting under `data/stacks/dec<+XX>/`. Every
+session and stack gets a `coverage.png` -- the beam swept along the drift
+track (an elongated band, not a circle: the sky moves during observing),
+drawn over the HI4PI column-density map when a strip cache exists.
+
 ### Running as a service on the Pi
 
 ```bash

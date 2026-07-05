@@ -32,7 +32,9 @@ sdr:
   nfft: 4096             # 586 Hz = 0.124 km/s per raw channel
   t_on_s: 15.0
   t_off_s: 15.0
-  settle_s: 0.25         # seconds of samples discarded after each retune
+  # samples discarded after each retune: must exceed PLL settling AND the
+  # rtl_tcp ring buffer depth (run rtl_tcp with -b 4 to keep that small)
+  settle_s: 0.5
   chunk_cycles: 20       # ON/OFF cycles per output .npz file
 
 processing:

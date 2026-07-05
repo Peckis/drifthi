@@ -21,6 +21,7 @@ constant declination through the Milky Way.
 | `hi-stack`       | PC      | combines several processed sessions into one deeper RA map |
 | `hi-check`       | both    | hardware bench test: ADC health, bias tee, bandpass, noise vs. radiometer limit |
 | `hi-spectrum`    | PC      | analyze any single HI spectrum CSV (e.g. from the PICTOR web telescope): baseline, Gaussians, LSR, HI4PI overlay + Kelvin calibration |
+| `hi-sunscan`     | PC      | solar pointing calibration: fits the Sun's drift through the beam from a daytime session |
 
 ## Quick start (no telescope needed yet)
 

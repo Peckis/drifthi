@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 
 from . import calibrate, extract, rfi, session, velocity
 from .config import load_config
+from .coverage import coverage_plot, find_strip_cache
 
 
 def process_session(session_dir: pathlib.Path, cfg: dict,
@@ -122,6 +123,10 @@ def process_session(session_dir: pathlib.Path, cfg: dict,
                         v=vgrid, W=W, counts=counts)
 
     _plots(prod, t, vgrid, T, ra_b, W, filled, meta)
+    coverage_plot(prod / "coverage.png", ra_b, dec_b, filled,
+                  float(cfg["pointing"]["beam_fwhm_deg"]),
+                  strip_path=find_strip_cache(cfg),
+                  title=f"coverage: {session_dir.name}")
 
     # --- science extraction -------------------------------------------------------
     rows = extract.analyze_bins(vgrid, W[filled], ra_b[filled], dec_b[filled],
@@ -132,6 +137,9 @@ def process_session(session_dir: pathlib.Path, cfg: dict,
 
 
 def _plots(prod, t, v, T, ra_b, W, filled, meta):
+    if not np.isfinite(T).any():
+        print("[process] WARNING: no finite data after calibration -- skipping plots")
+        return
     th = (t - t[0]) / 3600.0
     fig, ax = plt.subplots(figsize=(10, 6))
     vm = np.nanpercentile(T, [2, 99.5])
@@ -223,9 +231,25 @@ def _extraction_plots(prod, v, W, ra_b, l_b, b_b, rows):
         print(f"[extract] rotation curve: {rc.shape[0]} tangent points")
 
 
+def _is_stale(session_dir: pathlib.Path) -> bool:
+    """True if the session has raw chunks newer than its products."""
+    cal = session_dir / "products" / "calibrated.npz"
+    chunks = list(session_dir.glob("chunk_*.npz"))
+    if not chunks:
+        return False
+    if not cal.exists():
+        return True
+    return max(c.stat().st_mtime for c in chunks) > cal.stat().st_mtime
+
+
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Process a raw drift-scan session")
-    ap.add_argument("session", help="session directory (data/raw/...)")
+    ap = argparse.ArgumentParser(description="Process raw drift-scan sessions")
+    ap.add_argument("sessions", nargs="*", help="session directories (data/raw/...)")
+    ap.add_argument("--all", action="store_true",
+                    help="process every session under paths.raw_dir that has "
+                         "new data (skips up-to-date ones; see --force)")
+    ap.add_argument("--force", action="store_true",
+                    help="with --all: reprocess even up-to-date sessions")
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--start-h", type=float, default=None,
                     help="process only cycles after this many hours into the session")
@@ -235,10 +259,28 @@ def main(argv=None) -> int:
                     help="process only the most recent N hours (quick look)")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
-    prod = process_session(pathlib.Path(args.session), cfg,
-                           start_h=args.start_h, stop_h=args.stop_h,
-                           last_h=args.last_h)
-    print(f"[process] all products in {prod}")
+
+    dirs = [pathlib.Path(s) for s in args.sessions]
+    if args.all:
+        raw = pathlib.Path(cfg.get("paths", {}).get("raw_dir", "data/raw"))
+        for d in sorted(raw.iterdir()) if raw.exists() else []:
+            if not (d / "meta.json").exists() or d in dirs:
+                continue
+            if "sunscan" in d.name.lower():
+                print(f"[process] {d.name}: sunscan session, skipping "
+                      "(use hi-sunscan, or pass the directory explicitly)")
+                continue
+            if args.force or _is_stale(d):
+                dirs.append(d)
+            else:
+                print(f"[process] {d.name}: up to date, skipping")
+    if not dirs:
+        ap.error("no sessions given (pass directories or use --all)")
+
+    for d in dirs:
+        prod = process_session(d, cfg, start_h=args.start_h,
+                               stop_h=args.stop_h, last_h=args.last_h)
+        print(f"[process] all products in {prod}\n")
     return 0
 
 

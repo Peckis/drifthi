@@ -78,6 +78,12 @@ def main(argv=None) -> int:
     ap.add_argument("--no-bias-tee", action="store_true")
     args = ap.parse_args(argv)
 
+    # line-buffer stdout so `journalctl -f` / log files show cycles live
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:
+        pass
+
     # systemd stops services with SIGTERM: convert it to KeyboardInterrupt so
     # the same clean-shutdown path runs (flush chunk, finalize meta.json)
     def _sigterm(_sig, _frame):
