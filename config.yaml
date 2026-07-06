@@ -28,7 +28,7 @@ sdr:
   freq_off_hz: 1423.2e6
   gain_db: 29.7          # SAWbird already gives ~40 dB LNA gain; avoid ADC saturation
   ppm: 0
-  bias_tee: false        # SAWbird is powered externally -- keep the coax DC-free
+  bias_tee: true         # power the SAWbird through the coax (rtl_tcp bias tee)
   nfft: 4096             # 586 Hz = 0.124 km/s per raw channel
   t_on_s: 15.0
   t_off_s: 15.0
