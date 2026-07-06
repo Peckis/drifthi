@@ -88,27 +88,14 @@ def main(argv=None) -> int:
     sdr.set_sample_rate(fs)
     sdr.set_gain_db(float(s["gain_db"]))
     sdr.set_ppm(int(s.get("ppm", 0)))
+    # bring the chain into its operating state BEFORE judging levels
+    if bool(s.get("bias_tee", False)):
+        sdr.set_bias_tee(True)
+        time.sleep(0.5)
     sdr.set_freq(f_on)
     sdr.flush(int(0.3 * fs) * 2)
 
-    # ---- 1. ADC health --------------------------------------------------------
-    raw = _read_raw(sdr, int(0.5 * fs))
-    mean, std = float(raw.mean()), float(raw.std())
-    rails = float(np.mean((raw <= 1) | (raw >= 254)) * 100)
-    report["adc"] = {"mean": mean, "std": std, "rail_pct": rails}
-    print(f"[check] ADC: mean={mean:.1f} (ideal ~127.5), std={std:.1f}, "
-          f"samples at rails: {rails:.3f}%")
-    if rails > 1.0:
-        verdicts.append(f"FAIL: ADC clipping ({rails:.1f}% at rails) -- lower sdr.gain_db")
-    elif rails > 0.05:
-        verdicts.append(f"WARN: some ADC clipping ({rails:.2f}%) -- consider lower gain")
-    if std < 3.0:
-        verdicts.append(f"WARN: very low ADC drive (std={std:.1f}) -- raise sdr.gain_db "
-                        "or check the LNA is powered")
-    if not (110 < mean < 145):
-        verdicts.append(f"WARN: ADC mean {mean:.1f} far from 127.5 (DC offset?)")
-
-    # ---- 2. bias-tee / LNA aliveness test --------------------------------------
+    # ---- 1. bias-tee / LNA aliveness test --------------------------------------
     # never inject DC up the coax unless the config says the LNA is bias-tee
     # powered (or the user forces it): externally powered LNAs keep it off
     do_bias = args.bias_test or (bool(s.get("bias_tee", False))
@@ -140,6 +127,24 @@ def main(argv=None) -> int:
         sdr.set_bias_tee(False)
         verdicts.append("INFO: bias tee kept OFF; verify the LNA's power LED "
                         "is lit from its external supply")
+
+    # ---- 2. ADC health (in the final operating state, LNA powered) -------------
+    sdr.flush(int(0.3 * fs) * 2)
+    raw = _read_raw(sdr, int(0.5 * fs))
+    mean, std = float(raw.mean()), float(raw.std())
+    rails = float(np.mean((raw <= 1) | (raw >= 254)) * 100)
+    report["adc"] = {"mean": mean, "std": std, "rail_pct": rails}
+    print(f"[check] ADC: mean={mean:.1f} (ideal ~127.5), std={std:.1f}, "
+          f"samples at rails: {rails:.3f}%")
+    if rails > 1.0:
+        verdicts.append(f"FAIL: ADC clipping ({rails:.1f}% at rails) -- lower sdr.gain_db")
+    elif rails > 0.05:
+        verdicts.append(f"WARN: some ADC clipping ({rails:.2f}%) -- consider lower gain")
+    if std < 3.0:
+        verdicts.append(f"WARN: very low ADC drive (std={std:.1f}) -- raise sdr.gain_db "
+                        "or check the LNA is powered")
+    if not (110 < mean < 145):
+        verdicts.append(f"WARN: ADC mean {mean:.1f} far from 127.5 (DC offset?)")
 
     # ---- 3. ON/OFF spectra + quotient -------------------------------------------
     print("[check] taking 4 s spectra at ON and OFF tunings ...")
