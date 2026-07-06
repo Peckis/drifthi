@@ -24,7 +24,7 @@ import time
 import numpy as np
 
 from .config import load_config
-from .sdr_tcp import RtlTcp
+from .sdr_tcp import connect_autostart
 
 
 def _read_raw(sdr: RtlTcp, n_samples: int) -> np.ndarray:
@@ -78,7 +78,7 @@ def main(argv=None) -> int:
     verdicts: list[str] = []
 
     print(f"[check] connecting to rtl_tcp at {host}:{port} ...")
-    sdr = RtlTcp(host, port)
+    sdr, rtl_proc = connect_autostart(host, port)
     print(f"[check] connected: magic={sdr.magic!r}, tuner type={sdr.tuner_type}, "
           f"{sdr.tuner_gain_count} gain steps")
     report["tuner_type"] = sdr.tuner_type
@@ -155,6 +155,9 @@ def main(argv=None) -> int:
     sdr.flush(int(0.3 * fs) * 2)
     sp_off = _spectrum(sdr, 4.0, fs, nfft)
     sdr.close()
+    if rtl_proc is not None:
+        rtl_proc.terminate()
+        print("[check] stopped the rtl_tcp we started")
 
     from scipy.signal import savgol_filter
     off_sm = savgol_filter(sp_off, min(129, (nfft // 16) | 1), 3)

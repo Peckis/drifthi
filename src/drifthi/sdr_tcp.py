@@ -21,6 +21,42 @@ CMD_SET_AGC_MODE = 0x08
 CMD_SET_BIAS_TEE = 0x0E
 
 
+def connect_autostart(host: str, port: int, spawn: bool = True,
+                      timeout_s: float = 12.0):
+    """Connect to rtl_tcp; if nothing listens on localhost, start it ourselves.
+
+    Returns (RtlTcp, proc): proc is the spawned rtl_tcp process (terminate it
+    when done) or None if the server was already running / remote.
+    """
+    import shutil
+    import subprocess
+    import time as _t
+
+    proc = None
+    deadline = _t.monotonic() + timeout_s
+    while True:
+        try:
+            return RtlTcp(host, port), proc
+        except OSError as err:
+            local = host in ("127.0.0.1", "localhost", "::1")
+            if proc is None and spawn and local:
+                exe = shutil.which("rtl_tcp")
+                if exe is None:
+                    raise ConnectionError(
+                        f"rtl_tcp is not running on {host}:{port} and the binary "
+                        f"is not in PATH -- start it yourself:  "
+                        f"rtl_tcp -a {host} -p {port} -b 4") from err
+                print(f"[sdr] rtl_tcp not running -- starting it ({exe}) ...")
+                proc = subprocess.Popen(
+                    [exe, "-a", host, "-p", str(port), "-b", "4"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if _t.monotonic() > deadline:
+                if proc is not None:
+                    proc.terminate()
+                raise
+            _t.sleep(1.0)
+
+
 class RtlTcp:
     def __init__(self, host: str = "127.0.0.1", port: int = 1234, timeout: float = 10.0):
         self.host = host

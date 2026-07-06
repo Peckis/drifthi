@@ -26,7 +26,7 @@ import numpy as np
 
 from . import __version__
 from .config import load_config
-from .sdr_tcp import RtlTcp
+from .sdr_tcp import RtlTcp, connect_autostart
 from . import session as sess
 
 
@@ -50,8 +50,8 @@ def _integrate(sdr: RtlTcp, n_samples: int, nfft: int, window: np.ndarray):
     return np.fft.fftshift(acc / max(n_done, 1)), n_done
 
 
-def _connect(cfg_sdr: dict, bias_tee: bool) -> RtlTcp:
-    sdr = RtlTcp(cfg_sdr["host"], cfg_sdr["port"])
+def _connect(cfg_sdr: dict, bias_tee: bool):
+    sdr, proc = connect_autostart(cfg_sdr["host"], cfg_sdr["port"])
     print(f"[observe] connected to rtl_tcp at {sdr.host}:{sdr.port} "
           f"(tuner type {sdr.tuner_type}, {sdr.tuner_gain_count} gain steps)")
     sdr.set_sample_rate(float(cfg_sdr["sample_rate_hz"]))
@@ -63,7 +63,7 @@ def _connect(cfg_sdr: dict, bias_tee: bool) -> RtlTcp:
     else:
         sdr.set_bias_tee(False)
         print("[observe] bias tee OFF (LNA powered externally)")
-    return sdr
+    return sdr, proc
 
 
 def main(argv=None) -> int:
@@ -138,6 +138,8 @@ def main(argv=None) -> int:
     chunk_idx = 0
     cycle = 0
     sdr = None
+    rtl_proc = None   # rtl_tcp we spawned ourselves (terminated on exit)
+    p_ref = None      # first cycle's power: reference for the live dB column
 
     def flush():
         nonlocal chunk_idx
@@ -152,7 +154,8 @@ def main(argv=None) -> int:
         while deadline is None or time.time() < deadline:
             try:
                 if sdr is None:
-                    sdr = _connect(s, bias_tee)
+                    sdr, proc = _connect(s, bias_tee)
+                    rtl_proc = proc or rtl_proc
                 t0 = time.time()
                 sdr.set_freq(f_on)
                 sdr.flush(n_settle)
@@ -170,8 +173,12 @@ def main(argv=None) -> int:
                 cycle += 1
 
                 ratio = float(np.median(spec_on) / np.median(spec_off))
+                p_now = float(np.median(spec_off))
+                if p_ref is None:
+                    p_ref = p_now
+                p_db = 10 * np.log10(max(p_now, 1e-30) / p_ref)
                 print(f"[observe] cycle {cycle:6d}  {time.strftime('%H:%M:%S', time.gmtime(t1))}Z  "
-                      f"P_on/P_off={ratio:.4f}  ({t1-t0:.1f}s)")
+                      f"P_on/P_off={ratio:.4f}  P={p_db:+5.2f} dB  ({t1-t0:.1f}s)")
                 if len(cyc_t) >= chunk_cycles:
                     flush()
             except (ConnectionError, OSError, TimeoutError) as e:
@@ -187,6 +194,9 @@ def main(argv=None) -> int:
         flush()
         if sdr is not None:
             sdr.close()
+        if rtl_proc is not None:
+            rtl_proc.terminate()
+            print("[observe] stopped the rtl_tcp we started")
         meta["t_end_unix"] = time.time()
         meta["n_cycles"] = cycle
         sess.write_meta(out, meta)
