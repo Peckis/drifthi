@@ -56,12 +56,81 @@ def _model(t, base, slope, amp, t0, sig):
     return base + slope * (t - t0) + amp * np.exp(-0.5 * ((t - t0) / sig) ** 2)
 
 
+def _predict(cfg) -> int:
+    """When does the Sun cross the configured pointing, and how strongly?"""
+    import time as _time
+    pnt = cfg["pointing"]
+    fwhm = float(pnt["beam_fwhm_deg"])
+    ts = _time.time() + np.arange(0, 48 * 3600, 120.0)
+    az, el = _sun_altaz(ts, cfg)
+    ce = np.cos(np.radians(el))
+    dx = (az - float(pnt["az_deg"]) + 180.0) % 360.0 - 180.0
+    sep = np.hypot(dx * ce, el - float(pnt["el_deg"]))
+    up = el > 0
+    if not up.any():
+        print("[sunscan] the Sun never rises in the next 48 h?!")
+        return 1
+    for day, sl in (("next 24 h", slice(0, 720)), ("following day", slice(720, 1440))):
+        s = sep[sl].copy()
+        s[~up[sl]] = np.inf
+        i = int(np.argmin(s))
+        if not np.isfinite(s[i]):
+            continue
+        t_best = ts[sl][i]
+        amp = np.exp(-4 * np.log(2) * (s[i] / fwhm) ** 2)
+        verdict = ("STRONG transit -- go" if amp > 0.5 else
+                   "detectable" if amp > 0.05 else
+                   "too far from the beam -- no usable transit")
+        print(f"[sunscan] {day}: closest approach "
+              f"{_time.strftime('%Y-%m-%d %H:%M', _time.gmtime(t_best))} UTC, "
+              f"separation {s[i]:.1f} deg, bump ~{100*amp:.0f}% of max -- {verdict}")
+    print(f"[sunscan] record from ~2.5 h before to ~2.5 h after the closest approach")
+    return 0
+
+
+def _sun_at(cfg, when_utc: str) -> int:
+    """Where will the Sun be at a given time? Point the dish there and the
+    transit happens exactly then, dead-center."""
+    from astropy.time import Time
+    t = Time(when_utc, scale="utc").unix
+    az, el = (float(x[0]) for x in _sun_altaz(np.array([t]), cfg))
+    if el < 5:
+        print(f"[sunscan] Sun is at el={el:.1f} deg then -- below/near the "
+              "horizon, pick another time")
+        return 1
+    from .velocity import pointing_radec
+    cfg2 = {**cfg, "pointing": {**cfg["pointing"], "az_deg": az, "el_deg": el}}
+    _, dec = pointing_radec(np.array([t]), cfg2)
+    print(f"[sunscan] at {when_utc} UTC the Sun is at az={az:.2f}, el={el:.2f}")
+    print(f"[sunscan] point the dish there (tip: align by the feed shadow), set "
+          f"pointing.az_deg/el_deg in config.yaml, and you get a dead-center "
+          f"transit at that time")
+    print(f"[sunscan] kept for the night, that pointing drift-scans the "
+          f"dec = {float(dec[0]):+.1f} deg ring")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Fit a solar transit to calibrate pointing")
-    ap.add_argument("session", help="daytime session directory")
+    ap.add_argument("session", nargs="?", default=None,
+                    help="daytime session directory (omit with --predict/--sun-at)")
     ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--predict", action="store_true",
+                    help="just report when the Sun crosses the configured "
+                         "pointing in the next 48 h (no data needed)")
+    ap.add_argument("--sun-at", default=None, metavar="UTC",
+                    help="where is the Sun at this UTC time (e.g. "
+                         "2026-07-06T14:00:00)? Point the dish there to get a "
+                         "dead-center transit exactly then")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
+
+    if args.sun_at:
+        return _sun_at(cfg, args.sun_at)
+    if args.predict:
+        return _predict(cfg)
+    if args.session is None:
+        ap.error("give a session directory, or use --predict / --sun-at")
 
     meta, t, on, off = session.load_session(pathlib.Path(args.session))
     good = channel_mask(int(meta["nfft"]), 0.10, 3)
