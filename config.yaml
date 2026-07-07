@@ -59,6 +59,8 @@ hi4pi:
   v_bin_ch: 2            # average pairs of 1.29 km/s channels -> 2.58 km/s
 
 compare:
-  search_deg: 15.0       # +/- pointing search range
+  # +/- pointing search range: generous on purpose -- assume the pointing
+  # is worse than you think (wobbly mount, unknown feed offset)
+  search_deg: 25.0
   coarse_step_deg: 3.0
   fine_step_deg: 0.75
