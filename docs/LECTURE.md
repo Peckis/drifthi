@@ -433,6 +433,28 @@ config flag (`switching: inband` vs `classic`), verify with
 real A/B night. Old sessions remain processable — the mode is recorded
 in meta.json.
 
+**Relation to professional practice** (see the NRAO 12 m observing-modes
+tutorial, safe.nrao.edu/wiki/pub/Main/RadioTutorial/radio-obs-modes.pdf,
+§1.3 — the same technique, including the folding and the √2): the
+tutorial's "primary drawback," residual standing-wave ripple that differs
+between the two tunings, barely applies here. Their standing wave came
+from reflections between feed and subreflector (~10 m path → ripple
+period c/2d ≈ 15 MHz, comparable to their spectra), needing hardware
+cures: *focus modulation* (jiggle the focus ±λ/8 so alternate scans have
+opposite ripple phase) and *beam peak scattering* (a cone on the
+subreflector center deflecting the reflection to cold sky). An offset TV
+dish has no central blockage — nothing reflects back into the feed — and
+our reflection paths (~0.6 m dish–feed, ~meters of coax) give ripple
+periods of 20–250 MHz, i.e. a gentle slope across a 2.4 MHz band, handled
+by the polynomial baseline. Our ~0.7 MHz throw is also ~30× smaller than
+their ±25 MHz, so the bandpass mismatch between tunings is proportionally
+tiny. Their cautions that DO carry over: the throw must exceed the line's
+velocity extent (or it self-subtracts), and any RFI carrier appears twice
+in a folded spectrum — flag before folding. And where they switch at Hz
+rates (fast atmosphere/gain fluctuations on a big dish), we switch every
+15 s because the dongle needs ~0.5 s to settle per hop and the V4's gain
+is stable on that timescale — same physics, different optimum.
+
 ## 4.3 CI smoke test (insurance)
 A GitHub Actions workflow that, on every push, runs the simulator (short
 session, known injected sky), processes it, and asserts: products exist,
