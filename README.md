@@ -28,6 +28,7 @@ constant declination through the Milky Way.
 
 ```bash
 uv sync
+cp config.example.yaml config.yaml     # your private config (git-ignored)
 # simulate 24 h of drift scanning with a deliberately wrong pointing:
 uv run hi-simulate --duration-h 24 --true-daz 5 --true-del -4
 uv run hi-process data/raw/<session>

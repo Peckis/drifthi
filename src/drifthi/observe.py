@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import signal
 import sys
 import time
@@ -110,6 +111,19 @@ def main(argv=None) -> int:
     n_off = int(t_off * fs) // nfft * nfft
     n_settle = max(nfft, int(settle * fs) // nfft * nfft) * 2  # bytes = samples*2
     window = np.hanning(nfft).astype(np.float32)
+
+    # safety: if raw_dir lives on an external mount (/mnt/.. or /media/..)
+    # that isn't actually mounted, data would silently land on the SD card.
+    ap_root = os.path.abspath(out_root)
+    for base in ("/mnt", "/media"):
+        if ap_root.startswith(base + os.sep):
+            mountdir = os.sep.join(ap_root.split(os.sep)[:3])  # e.g. /mnt/ssd
+            if not os.path.ismount(mountdir):
+                print(f"[observe] WARNING: {mountdir} is NOT a mounted filesystem "
+                      f"-- data would go to the SD card, not the drive. "
+                      f"Run 'sudo mount -a' (or plug the drive in before boot), "
+                      f"then restart.", file=sys.stderr)
+            break
 
     out = sess.new_session_dir(out_root, args.tag)
     meta = {

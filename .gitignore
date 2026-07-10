@@ -5,6 +5,9 @@ data/
 hi4pi_cache/
 tools/
 checks/
+# personal config: edit config.yaml freely, it never conflicts with pulls.
+# The tracked template is config.example.yaml.
+/config.yaml
 *.npz
 *.fits
 *.png

@@ -1,4 +1,12 @@
-# drifthi configuration -- edit site and pointing to match your setup.
+# drifthi configuration TEMPLATE.
+#
+# This file (config.example.yaml) is tracked in git. Your real config is
+# config.yaml, which is git-ignored so your settings never conflict with
+# updates. First-time setup on a new machine:
+#     cp config.example.yaml config.yaml
+# then edit config.yaml (site, pointing, and raw_dir). Pull updates freely;
+# git will never touch your config.yaml. If a new option is added here,
+# copy that one key into your config.yaml by hand.
 
 paths:
   # Where hi-observe / hi-simulate write raw sessions. Point this at your
