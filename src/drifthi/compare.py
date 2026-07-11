@@ -51,10 +51,16 @@ def _time_bin(t, T, bin_s: float):
     return np.array(tb), np.array(Ob)
 
 
-def _score(O, M):
-    """(pearson r, gain) over pixels finite in both."""
-    m = np.isfinite(O) & np.isfinite(M)
-    if m.sum() < 200:
+def _score(O, M, min_finite: float = 0.7):
+    """(pearson r, gain) over pixels finite in both.
+
+    Offsets whose model track hangs off the strip-cache edge are rejected
+    outright (min_finite): a partially-NaN model is a biased model, and
+    edge tracks otherwise masquerade as fit maxima.
+    """
+    o_fin = np.isfinite(O)
+    m = o_fin & np.isfinite(M)
+    if m.sum() < 200 or m.sum() < min_finite * max(o_fin.sum(), 1):
         return -np.inf, np.nan
     o, mm = O[m], M[m]
     o = o - o.mean()
@@ -106,6 +112,19 @@ def fit_pointing(cfg, strip_path: pathlib.Path, t, v, T):
     r, daz, dele, gain = best
     print(f"[compare]   fine best r={r:.3f} at daz={daz:+.2f}, del={dele:+.2f}, "
           f"gain={gain:.3f}")
+    _, dec_best = velocity.pointing_radec(tb, cfg, daz, dele)
+    dec_b = float(np.mean(dec_best))
+    half_beam = float(cfg["pointing"]["beam_fwhm_deg"]) / 2.0
+    if dec_b - half_beam < dec_g[0] or dec_b + half_beam > dec_g[-1]:
+        print(f"[compare] WARNING: best-fit track (dec {dec_b:+.1f}) is within a "
+              f"half-beam of the strip-cache edge [{dec_g[0]:.1f}, {dec_g[-1]:.1f}] "
+              f"-- the fit may be edge-biased; fetch a wider strip "
+              f"(hi-fetch-hi4pi --dec-min/--dec-max) and refit")
+    hb = float(cc["search_deg"])
+    if max(abs(daz), abs(dele)) >= hb - float(cc["fine_step_deg"]):
+        print(f"[compare] WARNING: best fit sits at the search boundary "
+              f"(+-{hb:.0f} deg) -- the true optimum may lie outside; "
+              f"raise compare.search_deg and rerun")
     return {
         "r": r, "daz_deg": daz, "del_deg": dele, "gain": gain,
         "grids": ((az1, el1, R1), (az2, el2, R2)),
