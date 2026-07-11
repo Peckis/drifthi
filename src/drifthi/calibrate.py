@@ -15,6 +15,25 @@ from scipy.ndimage import median_filter
 from scipy.signal import savgol_filter
 
 
+def despike(spec: np.ndarray, width: int = 9, sigma: float = 6.0):
+    """Remove narrowband carriers from raw ON/OFF spectra before calibration.
+
+    Narrow RFI (1-3 channels) is unmistakable against the smooth bandpass:
+    anything deviating > sigma robust-stddevs from a running median gets
+    replaced by that median. The HI line is safe -- even a narrow galactic
+    component spans >= ~16 raw channels, far wider than the filter window,
+    so it IS the local median. This catches carriers inside the protected
+    velocity window that the statistical flagger must leave alone.
+    Returns (cleaned copy, fraction of samples replaced).
+    """
+    med = median_filter(spec, size=(1, width))
+    resid = spec - med
+    mad = np.median(np.abs(resid), axis=1, keepdims=True)
+    bad = np.abs(resid) > sigma * 1.4826 * np.maximum(mad, 1e-30)
+    out = np.where(bad, med, spec)
+    return out, float(bad.mean())
+
+
 def channel_mask(nfft: int, edge_frac: float, dc_halfwidth: int) -> np.ndarray:
     """True where a channel is usable (inside filter rolloff, away from DC)."""
     good = np.ones(nfft, dtype=bool)

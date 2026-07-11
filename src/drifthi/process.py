@@ -51,11 +51,28 @@ def process_session(session_dir: pathlib.Path, cfg: dict,
     prod = session_dir / "products"
     prod.mkdir(exist_ok=True)
 
+    # --- narrowband despike of the raw spectra (carriers, RFI combs) -----------
+    dsig = float(pc.get("despike_sigma", 6.0))
+    dwid = int(pc.get("despike_width", 9))
+    if dsig > 0:
+        on, f_on = calibrate.despike(on, width=dwid, sigma=dsig)
+        off, f_off = calibrate.despike(off, width=dwid, sigma=dsig)
+        print(f"[process] despiked narrowband RFI: {100*f_on:.2f}% of ON, "
+              f"{100*f_off:.2f}% of OFF samples")
+
     # --- calibration to Kelvin ------------------------------------------------
     tsys = float(pc["tsys_assumed_k"])
     q = calibrate.quotient_kelvin(on, off, tsys)
     good_chan = calibrate.channel_mask(nfft, float(pc["edge_frac"]),
                                        int(pc["dc_halfwidth_bins"]))
+
+    # persistent carriers / SMPS combs: fixed in channel space all night,
+    # immune to the protected-window statistical flagger -- kill by channel
+    persist = rfi.flag_persistent_channels(
+        on, off, good_chan,
+        sigma=float(pc.get("rfi_persist_sigma", 5.0)),
+        max_width=int(pc.get("rfi_persist_maxwidth", 80)))
+    q[:, persist] = np.nan
 
     freqs = velocity.channel_freqs_hz(float(meta["freq_on_hz"]),
                                       float(meta["sample_rate_hz"]), nfft)
